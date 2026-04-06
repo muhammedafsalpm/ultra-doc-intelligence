@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultra Doc-Intelligence - AI Logistics Document Assistant</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo">
+                <span class="logo-icon">🚚</span>
+                <h1>Ultra Doc-Intelligence</h1>
+            </div>
+            <p class="tagline">AI-Powered Logistics Document Understanding System</p>
+        </header>
+
+        <div class="main-grid">
+            <!-- Upload Panel -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-icon">📄</span>
+                    <h2>Document Upload</h2>
+                </div>
+                
+                <div class="upload-area" id="uploadArea">
+                    <input type="file" id="fileInput" accept=".pdf,.docx,.txt" style="display: none;">
+                    <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+                        <div class="upload-icon">📁</div>
+                        <p>Click to select or drag & drop</p>
+                        <small>Supports PDF, DOCX, TXT (Max 10MB)</small>
+                    </div>
+                    
+                    <div class="file-info" id="fileInfo" style="display: none;">
+                        <span id="fileName"></span>
+                        <button class="btn-small" onclick="clearFile()">✕</button>
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="uploadDocument()" id="uploadBtn" disabled>
+                        Upload & Process
+                    </button>
+                </div>
+                
+                <div id="uploadStatus"></div>
+                
+                <div id="sessionInfo" class="session-info" style="display: none;">
+                    <div class="info-row">
+                        <strong>Session ID:</strong>
+                        <code id="sessionId"></code>
+                    </div>
+                    <div class="info-row">
+                        <strong>Document:</strong>
+                        <span id="docName"></span>
+                    </div>
+                    <div class="info-row">
+                        <strong>Chunks:</strong>
+                        <span id="chunksCount"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Q&A Panel -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-icon">❓</span>
+                    <h2>Ask Questions</h2>
+                </div>
+                
+                <div class="question-area">
+                    <input type="text" id="questionInput" placeholder="e.g., What is the carrier rate? When is pickup scheduled?" class="question-input">
+                    <button class="btn btn-primary" onclick="askQuestion()" id="askBtn" disabled>Ask</button>
+                </div>
+                
+                <div class="suggestions">
+                    <small>Example questions:</small>
+                    <div class="suggestion-chips">
+                        <span class="chip" onclick="setQuestion('What is the carrier rate?')">What is the carrier rate?</span>
+                        <span class="chip" onclick="setQuestion('When is pickup scheduled?')">When is pickup scheduled?</span>
+                        <span class="chip" onclick="setQuestion('Who is the consignee?')">Who is the consignee?</span>
+                        <span class="chip" onclick="setQuestion('What is the shipment weight?')">What is the shipment weight?</span>
+                    </div>
+                </div>
+                
+                <div id="answerArea" style="display: none;">
+                    <div class="answer-section">
+                        <h3>Answer</h3>
+                        <div id="answer" class="answer-box"></div>
+                    </div>
+                    
+                    <div class="confidence-section">
+                        <h3>Confidence Score</h3>
+                        <div class="confidence-meter">
+                            <div id="confidenceFill" class="confidence-fill"></div>
+                            <span id="confidenceText" class="confidence-text"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="sources-section">
+                        <h3>Source Context</h3>
+                        <div id="sources" class="sources-box"></div>
+                    </div>
+                    
+                    <div id="groundedBadge" class="badge"></div>
+                </div>
+            </div>
+
+            <!-- Extraction Panel -->
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-icon">📊</span>
+                    <h2>Structured Extraction</h2>
+                </div>
+                
+                <p class="panel-description">Extract structured shipment data from the document</p>
+                
+                <button class="btn btn-primary" onclick="extractStructured()" id="extractBtn" disabled>
+                    Extract Shipment Data
+                </button>
+                
+                <div id="extractionResult" style="display: none;">
+                    <div class="extraction-fields">
+                        <h3>Extracted Data</h3>
+                        <pre id="extractedJson" class="json-viewer"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="app-footer">
+            <p>Ultra Doc-Intelligence v1.0 | Powered by RAG + Guardrails</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
