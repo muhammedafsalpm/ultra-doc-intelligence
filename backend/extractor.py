@@ -2,7 +2,7 @@ import re
 from typing import Dict, Any, List, Tuple
 from datetime import datetime
 import json
-from config import Config
+from .config import Config
 
 class StructuredExtractor:
     def __init__(self):

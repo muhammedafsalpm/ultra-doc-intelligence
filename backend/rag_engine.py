@@ -2,7 +2,7 @@ import numpy as np
 from typing import List, Dict, Any, Tuple
 from sentence_transformers import SentenceTransformer
 import faiss
-from config import Config
+from .config import Config
 
 class RAGEngine:
     def __init__(self):

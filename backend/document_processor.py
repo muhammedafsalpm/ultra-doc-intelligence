@@ -4,7 +4,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 from docx import Document
 import io
-from config import Config
+from .config import Config
 
 class DocumentProcessor:
     def __init__(self):

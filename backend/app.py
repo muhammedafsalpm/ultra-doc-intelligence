@@ -6,11 +6,11 @@ import uuid
 from datetime import datetime
 import asyncio
 
-from config import Config
-from models import AskRequest, AskResponse, UploadResponse, ExtractResponse, HealthResponse
-from document_processor import DocumentProcessor
-from rag_engine import RAGEngine
-from extractor import StructuredExtractor
+from .config import Config
+from .models import AskRequest, AskResponse, UploadResponse, ExtractResponse, HealthResponse
+from .document_processor import DocumentProcessor
+from .rag_engine import RAGEngine
+from .extractor import StructuredExtractor
 
 # Initialize FastAPI app
 app = FastAPI(
