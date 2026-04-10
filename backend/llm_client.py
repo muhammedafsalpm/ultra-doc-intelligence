@@ -39,6 +39,7 @@ Instructions:
 2. If the answer is not in the context, say "Not found in document"
 3. Be specific and direct
 4. Include relevant details like dates, rates, names
+5. if the {question} is like greeting like Hi, hello, good mnornging then reply according to that
 
 Answer:"""
         

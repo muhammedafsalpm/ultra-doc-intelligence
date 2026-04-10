@@ -44,18 +44,16 @@ async function uploadDocument() {
     }
     
     const fileSizeMB = file.size / (1024 * 1024);
-    
-    // Check if file is too large
     if (fileSizeMB > 100) {
         showStatus('File too large. Maximum size is 100MB', 'error');
         return;
     }
     
-    // Show warning for large files
     if (fileSizeMB > 10) {
-        const proceed = confirm(`File size is ${fileSizeMB.toFixed(1)}MB. Large files may take longer to process. Continue?`);
-        if (!proceed) return;
-        showStatus(`Processing large file (${fileSizeMB.toFixed(1)}MB). This may take a moment...`, 'info');
+        if (!confirm(`File size is ${fileSizeMB.toFixed(1)}MB. Processing may take a moment. Continue?`)) {
+            return;
+        }
+        showStatus(`Processing large file (${fileSizeMB.toFixed(1)}MB)...`, 'info');
     }
     
     const formData = new FormData();
@@ -64,10 +62,8 @@ async function uploadDocument() {
     showStatus('Uploading and processing document...', 'info');
     document.getElementById('uploadBtn').disabled = true;
     
-    // Use streaming endpoint for large files
-    const endpoint = file.size > 10 * 1024 * 1024 ? '/upload-stream' : '/upload';
-    
     try {
+        const endpoint = file.size > 10 * 1024 * 1024 ? '/upload-stream' : '/upload';
         const response = await fetch(`${API_URL}${endpoint}`, {
             method: 'POST',
             body: formData
@@ -77,19 +73,23 @@ async function uploadDocument() {
         
         if (response.ok) {
             currentSessionId = data.session_id;
-            showStatus(`✅ ${data.message}`, 'success');
+            showStatus(`Success: ${data.message}. Indexed ${data.chunks_count} text chunks.`, 'success');
             
             document.getElementById('sessionId').textContent = currentSessionId;
             document.getElementById('docName').textContent = data.filename;
             document.getElementById('chunksCount').textContent = data.chunks_count;
+            document.getElementById('createdAt').textContent = new Date(data.timestamp).toLocaleString();
             document.getElementById('sessionInfo').style.display = 'block';
             document.getElementById('askBtn').disabled = false;
             document.getElementById('extractBtn').disabled = false;
+            
+            // Refresh sessions list
+            refreshSessions();
         } else {
-            showStatus(`❌ Error: ${data.detail}`, 'error');
+            showStatus(`Error: ${data.detail}`, 'error');
         }
     } catch (error) {
-        showStatus(`❌ Connection error: ${error.message}. Make sure the backend is running on port 8000`, 'error');
+        showStatus(`Connection error: ${error.message}. Make sure backend is running on port 8000`, 'error');
     } finally {
         document.getElementById('uploadBtn').disabled = false;
     }
@@ -109,7 +109,7 @@ async function askQuestion() {
     }
     
     document.getElementById('askBtn').disabled = true;
-    document.getElementById('askBtn').textContent = 'Thinking...';
+    document.getElementById('askBtn').textContent = 'Processing...';
     
     try {
         const response = await fetch(`${API_URL}/ask`, {
@@ -134,7 +134,7 @@ async function askQuestion() {
         alert(`Connection error: ${error.message}`);
     } finally {
         document.getElementById('askBtn').disabled = false;
-        document.getElementById('askBtn').textContent = 'Ask';
+        document.getElementById('askBtn').textContent = 'Submit Query';
     }
 }
 
@@ -142,23 +142,19 @@ function displayAnswer(data) {
     document.getElementById('answerArea').style.display = 'block';
     document.getElementById('answer').textContent = data.answer;
     
-    // Display confidence
     const confidencePercent = (data.confidence_score * 100).toFixed(1);
     document.getElementById('confidenceFill').style.width = `${confidencePercent}%`;
     document.getElementById('confidenceText').textContent = `${confidencePercent}%`;
     
-    // Change color based on confidence
     const fill = document.getElementById('confidenceFill');
     if (data.confidence_score < 0.4) {
-        fill.style.background = 'linear-gradient(90deg, #f56565, #c53030)';
-        fill.style.color = 'white';
+        fill.style.background = 'linear-gradient(90deg, #ef4444, #dc2626)';
     } else if (data.confidence_score < 0.7) {
-        fill.style.background = 'linear-gradient(90deg, #ed8936, #dd6b20)';
+        fill.style.background = 'linear-gradient(90deg, #f59e0b, #d97706)';
     } else {
-        fill.style.background = 'linear-gradient(90deg, #48bb78, #38a169)';
+        fill.style.background = 'linear-gradient(90deg, #10b981, #059669)';
     }
     
-    // Display sources
     const sourcesDiv = document.getElementById('sources');
     sourcesDiv.innerHTML = '';
     if (data.sources && data.sources.length > 0) {
@@ -171,17 +167,15 @@ function displayAnswer(data) {
         sourcesDiv.innerHTML = '<div>No specific sources available</div>';
     }
     
-    // Display grounding badge
     const badge = document.getElementById('groundedBadge');
     if (data.grounded) {
-        badge.textContent = '✓ Grounded Answer - Information verified from document';
+        badge.textContent = 'Verified Answer - Information confirmed from document';
         badge.className = 'badge badge-grounded';
     } else {
-        badge.textContent = '⚠ Low Confidence - Please verify information';
+        badge.textContent = 'Low Confidence - Please verify information';
         badge.className = 'badge badge-not-grounded';
     }
     
-    // Scroll to answer
     document.getElementById('answerArea').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -204,18 +198,12 @@ async function extractStructured() {
         if (response.ok) {
             document.getElementById('extractionResult').style.display = 'block';
             
-            // Format JSON for display
             const formatted = {
                 extracted_data: data.extracted_data,
                 confidence_scores: data.confidence_scores
             };
             
             document.getElementById('extractedJson').textContent = JSON.stringify(formatted, null, 2);
-            
-            // Highlight null values
-            const jsonText = document.getElementById('extractedJson').textContent;
-            const highlighted = jsonText.replace(/"null"/g, '"⚠️ null"');
-            document.getElementById('extractedJson').textContent = highlighted;
         } else {
             alert(`Error: ${data.detail}`);
         }
@@ -227,19 +215,142 @@ async function extractStructured() {
     }
 }
 
+async function deleteSession() {
+    if (!currentSessionId) {
+        return;
+    }
+    
+    if (!confirm('Are you sure you want to delete this session? All document data will be removed.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_URL}/session/${currentSessionId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showStatus('Session deleted successfully', 'success');
+            currentSessionId = null;
+            document.getElementById('sessionInfo').style.display = 'none';
+            document.getElementById('answerArea').style.display = 'none';
+            document.getElementById('extractionResult').style.display = 'none';
+            document.getElementById('askBtn').disabled = true;
+            document.getElementById('extractBtn').disabled = true;
+            document.getElementById('questionInput').value = '';
+            refreshSessions();
+        } else {
+            const data = await response.json();
+            showStatus(`Error: ${data.detail}`, 'error');
+        }
+    } catch (error) {
+        showStatus(`Connection error: ${error.message}`, 'error');
+    }
+}
+
+async function refreshSessions() {
+    try {
+        const response = await fetch(`${API_URL}/sessions`);
+        const data = await response.json();
+        
+        const sessionsList = document.getElementById('sessionsList');
+        
+        if (data.active_sessions === 0) {
+            sessionsList.innerHTML = '<p class="empty-message">No active sessions</p>';
+            return;
+        }
+        
+        sessionsList.innerHTML = '';
+        data.sessions.forEach(session => {
+            const sessionDiv = document.createElement('div');
+            sessionDiv.className = 'session-item';
+            sessionDiv.innerHTML = `
+                <div class="session-info-compact">
+                    <div class="session-id">${session.session_id.substring(0, 16)}...</div>
+                    <div class="session-doc">${session.filename}</div>
+                    <div class="session-doc" style="font-size: 0.7rem; color: #6b7280;">${new Date(session.created_at).toLocaleString()}</div>
+                </div>
+                <div class="session-actions">
+                    <button class="btn-small" onclick="switchToSession('${session.session_id}')">Load</button>
+                    <button class="btn-small" onclick="deleteSessionById('${session.session_id}')">Delete</button>
+                </div>
+            `;
+            sessionsList.appendChild(sessionDiv);
+        });
+    } catch (error) {
+        console.error('Failed to refresh sessions:', error);
+    }
+}
+
+function switchToSession(sessionId) {
+    currentSessionId = sessionId;
+    
+    // Find session data from the list
+    fetch(`${API_URL}/sessions`)
+        .then(res => res.json())
+        .then(data => {
+            const session = data.sessions.find(s => s.session_id === sessionId);
+            if (session) {
+                document.getElementById('sessionId').textContent = sessionId;
+                document.getElementById('docName').textContent = session.filename;
+                document.getElementById('chunksCount').textContent = session.chunks_count;
+                document.getElementById('createdAt').textContent = new Date(session.created_at).toLocaleString();
+                document.getElementById('sessionInfo').style.display = 'block';
+                document.getElementById('askBtn').disabled = false;
+                document.getElementById('extractBtn').disabled = false;
+                showStatus(`Loaded session for ${session.filename}`, 'success');
+            }
+        })
+        .catch(error => {
+            showStatus(`Error loading session: ${error.message}`, 'error');
+        });
+}
+
+async function deleteSessionById(sessionId) {
+    if (!confirm('Delete this session?')) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/session/${sessionId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            if (currentSessionId === sessionId) {
+                currentSessionId = null;
+                document.getElementById('sessionInfo').style.display = 'none';
+                document.getElementById('askBtn').disabled = true;
+                document.getElementById('extractBtn').disabled = true;
+            }
+            refreshSessions();
+            showStatus('Session deleted', 'success');
+        }
+    } catch (error) {
+        showStatus(`Error: ${error.message}`, 'error');
+    }
+}
+
+function copyToClipboard() {
+    const jsonText = document.getElementById('extractedJson').textContent;
+    navigator.clipboard.writeText(jsonText).then(() => {
+        showStatus('JSON copied to clipboard', 'success');
+    }).catch(() => {
+        showStatus('Failed to copy', 'error');
+    });
+}
+
 // Drag and drop support
 const dropZone = document.querySelector('.upload-zone');
 if (dropZone) {
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
         dropZone.style.borderColor = 'var(--primary)';
-        dropZone.style.background = 'var(--light)';
+        dropZone.style.background = '#eff6ff';
     });
     
     dropZone.addEventListener('dragleave', (e) => {
         e.preventDefault();
         dropZone.style.borderColor = 'var(--border)';
-        dropZone.style.background = 'transparent';
+        dropZone.style.background = 'var(--light)';
     });
     
     dropZone.addEventListener('drop', (e) => {
@@ -255,6 +366,9 @@ if (dropZone) {
             fileInput.dispatchEvent(event);
         }
         dropZone.style.borderColor = 'var(--border)';
-        dropZone.style.background = 'transparent';
+        dropZone.style.background = 'var(--light)';
     });
 }
+
+// Load sessions on page load
+refreshSessions();
