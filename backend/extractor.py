@@ -2,10 +2,12 @@ import re
 from typing import Dict, Any, List, Tuple
 from datetime import datetime
 import json
-from .config import Config
+from config import Config
+from llm_client import LLMClient
 
 class StructuredExtractor:
     def __init__(self):
+        self.llm_client = LLMClient()
         self.date_patterns = [
             r'(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
             r'(\d{4}-\d{2}-\d{2})',
@@ -13,28 +15,15 @@ class StructuredExtractor:
         ]
     
     def extract_shipment_data(self, chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Extract structured shipment data with confidence scores"""
+        """Extract structured shipment data using LLM"""
         
-        # Combine all text for extraction
-        full_text = " ".join([chunk['text'] for chunks in chunks]) # Fix typo? Wait, no, chunks is the list, should be: for chunk in chunks
+        # Combine text
         full_text = " ".join([chunk['text'] for chunk in chunks])
         
-        # Extract each field
-        extracted = {
-            'shipment_id': self._extract_shipment_id(full_text),
-            'shipper': self._extract_shipper(full_text),
-            'consignee': self._extract_consignee(full_text),
-            'pickup_datetime': self._extract_pickup_datetime(full_text),
-            'delivery_datetime': self._extract_delivery_datetime(full_text),
-            'equipment_type': self._extract_equipment_type(full_text),
-            'mode': self._extract_mode(full_text),
-            'rate': self._extract_rate(full_text),
-            'currency': self._extract_currency(full_text),
-            'weight': self._extract_weight(full_text),
-            'carrier_name': self._extract_carrier_name(full_text)
-        }
+        # Use LLM for extraction
+        extracted = self.llm_client.extract_structured_data(full_text)
         
-        # Calculate confidence for each extraction
+        # Calculate confidence
         confidence_scores = self._calculate_extraction_confidence(extracted, full_text)
         
         return {
