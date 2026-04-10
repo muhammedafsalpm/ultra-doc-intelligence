@@ -16,21 +16,29 @@ class DocumentProcessor:
         )
     
     def process_document(self, file_content: bytes, filename: str) -> List[Dict[str, Any]]:
-        """Process uploaded document and return chunks with metadata"""
+        """Process uploaded document with dynamic chunking for large files"""
         
-        # Extract text based on file type
         text = self._extract_text(file_content, filename)
         
         if not text or len(text.strip()) < 10:
             raise ValueError("Could not extract sufficient text from document")
         
-        # Clean text
-        text = self._clean_text(text)
+        # Dynamic chunking based on document size
+        doc_size = len(text)
+        if doc_size > 50000:  # Large document
+            # Use larger chunks for efficiency
+            original_chunk_size = Config.CHUNK_SIZE
+            Config.CHUNK_SIZE = 800
+            Config.CHUNK_OVERLAP = 100
+            
+            chunks = self._intelligent_chunking(text)
+            
+            # Restore original settings
+            Config.CHUNK_SIZE = original_chunk_size
+        else:
+            chunks = self._intelligent_chunking(text)
         
-        # Intelligent chunking
-        chunks = self._intelligent_chunking(text)
-        
-        # Add metadata to chunks
+        # Add metadata
         chunks_with_metadata = []
         for i, chunk in enumerate(chunks):
             chunks_with_metadata.append({
@@ -39,7 +47,8 @@ class DocumentProcessor:
                 'metadata': {
                     'filename': filename,
                     'chunk_id': i,
-                    'total_chunks': len(chunks)
+                    'total_chunks': len(chunks),
+                    'doc_size': doc_size
                 }
             })
         

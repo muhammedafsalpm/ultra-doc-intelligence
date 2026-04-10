@@ -43,9 +43,19 @@ async function uploadDocument() {
         return;
     }
     
-    if (file.size > 10 * 1024 * 1024) {
-        showStatus('File too large. Maximum size is 10MB', 'error');
+    const fileSizeMB = file.size / (1024 * 1024);
+    
+    // Check if file is too large
+    if (fileSizeMB > 100) {
+        showStatus('File too large. Maximum size is 100MB', 'error');
         return;
+    }
+    
+    // Show warning for large files
+    if (fileSizeMB > 10) {
+        const proceed = confirm(`File size is ${fileSizeMB.toFixed(1)}MB. Large files may take longer to process. Continue?`);
+        if (!proceed) return;
+        showStatus(`Processing large file (${fileSizeMB.toFixed(1)}MB). This may take a moment...`, 'info');
     }
     
     const formData = new FormData();
@@ -54,8 +64,11 @@ async function uploadDocument() {
     showStatus('Uploading and processing document...', 'info');
     document.getElementById('uploadBtn').disabled = true;
     
+    // Use streaming endpoint for large files
+    const endpoint = file.size > 10 * 1024 * 1024 ? '/upload-stream' : '/upload';
+    
     try {
-        const response = await fetch(`${API_URL}/upload`, {
+        const response = await fetch(`${API_URL}${endpoint}`, {
             method: 'POST',
             body: formData
         });
@@ -64,7 +77,7 @@ async function uploadDocument() {
         
         if (response.ok) {
             currentSessionId = data.session_id;
-            showStatus(`✅ ${data.message}. Processed ${data.chunks_count} chunks.`, 'success');
+            showStatus(`✅ ${data.message}`, 'success');
             
             document.getElementById('sessionId').textContent = currentSessionId;
             document.getElementById('docName').textContent = data.filename;

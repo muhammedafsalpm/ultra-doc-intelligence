@@ -86,6 +86,79 @@ async def upload_document(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
 
+@app.post("/upload-stream")
+async def upload_document_stream(file: UploadFile = File(...)):
+    """Upload large documents using streaming"""
+    
+    import tempfile
+    import aiofiles
+    import os
+    
+    # Create temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.filename}") as tmp_file:
+        tmp_path = tmp_file.name
+        
+        # Stream file in chunks
+        total_size = 0
+        chunk_number = 0
+        
+        async with aiofiles.open(tmp_path, 'wb') as f:
+            while chunk := await file.read(1024 * 1024):  # 1MB chunks
+                total_size += len(chunk)
+                
+                # Check size limit
+                if total_size > Config.MAX_FILE_SIZE:
+                    os.unlink(tmp_path)
+                    raise HTTPException(status_code=413, detail=f"File too large. Max: {Config.MAX_FILE_SIZE/1024/1024}MB")
+                
+                await f.write(chunk)
+                chunk_number += 1
+                
+                # Log progress for very large files
+                if total_size > 50 * 1024 * 1024 and chunk_number % 10 == 0:
+                    print(f"Uploading: {total_size/1024/1024:.1f}MB")
+    
+    try:
+        # Read the temp file
+        with open(tmp_path, 'rb') as f:
+            content = f.read()
+        
+        session_id = str(uuid.uuid4())
+        
+        # Process document
+        chunks = doc_processor.process_document(content, file.filename)
+        
+        if not chunks:
+            raise HTTPException(status_code=400, detail="Could not process document")
+        
+        # Create vector store
+        vectorstore = rag_engine.create_vectorstore(chunks, session_id)
+        
+        # Store session
+        sessions[session_id] = {
+            "filename": file.filename,
+            "chunks": chunks,
+            "created_at": datetime.now(),
+            "vectorstore": vectorstore,
+            "file_size_mb": total_size / 1024 / 1024
+        }
+        
+        return UploadResponse(
+            session_id=session_id,
+            filename=file.filename,
+            chunks_count=len(chunks),
+            message=f"Document uploaded ({(total_size/1024/1024):.1f}MB) and processed into {len(chunks)} chunks",
+            timestamp=datetime.now()
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+    
+    finally:
+        # Clean up
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
 @app.post("/ask", response_model=AskResponse)
 async def ask_question(request: AskRequest):
     """Ask a question about the uploaded document"""

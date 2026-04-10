@@ -34,7 +34,9 @@ class Config:
     HALLUCINATION_CHECK = True
     
     # File settings
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+    MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+    LARGE_FILE_THRESHOLD = 50 * 1024 * 1024  # 50MB
+    STREAMING_CHUNK_SIZE = 1024 * 1024  # 1MB chunks
     ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.txt'}
     
     # Model settings
