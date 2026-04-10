@@ -7,30 +7,20 @@ from llm_client import LLMClient
 
 class RAGEngine:
     def __init__(self):
-        # Initialize embedding model
         self.embedding_model = SentenceTransformer(Config.EMBEDDING_MODEL)
         self.llm_client = LLMClient()
-        self.indexes = {}  # Store FAISS indexes per session
-        self.chunks_store = {}  # Store chunks per session
+        self.indexes = {}
+        self.chunks_store = {}
     
     def create_vectorstore(self, chunks: List[Dict[str, Any]], session_id: str) -> Dict[str, Any]:
-        """Create FAISS vector store from chunks"""
-        
-        # Extract texts
         texts = [chunk['text'] for chunk in chunks]
-        
-        # Create embeddings
         embeddings = self.embedding_model.encode(texts, convert_to_numpy=True)
-        
-        # Normalize embeddings for cosine similarity
         embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
         
-        # Create FAISS index
         dimension = embeddings.shape[1]
-        index = faiss.IndexFlatIP(dimension)  # Inner product (cosine for normalized vectors)
+        index = faiss.IndexFlatIP(dimension)
         index.add(embeddings.astype('float32'))
         
-        # Store
         self.indexes[session_id] = index
         self.chunks_store[session_id] = chunks
         
@@ -41,22 +31,17 @@ class RAGEngine:
         }
     
     def retrieve(self, session_id: str, query: str, k: int = None) -> List[Dict[str, Any]]:
-        """Retrieve relevant chunks with similarity scores"""
-        
         if k is None:
             k = Config.TOP_K
         
         if session_id not in self.indexes:
             return []
         
-        # Encode query
         query_embedding = self.embedding_model.encode([query], convert_to_numpy=True)
         query_embedding = query_embedding / np.linalg.norm(query_embedding)
         
-        # Search in FAISS
         scores, indices = self.indexes[session_id].search(query_embedding.astype('float32'), k)
         
-        # Get chunks with scores
         retrieved = []
         chunks = self.chunks_store[session_id]
         
@@ -74,6 +59,19 @@ class RAGEngine:
     def generate_answer(self, question: str, retrieved_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Generate answer using LLM with guardrails"""
         
+        # Check for greetings first
+        greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'how are you']
+        is_greeting = any(greeting in question.lower() for greeting in greetings)
+        
+        if is_greeting:
+            return {
+                'answer': "Hello! I'm your logistics document assistant. You can ask me questions about carrier rates, pickup schedules, consignee information, and more. Please upload a document and ask away!",
+                'sources': [],
+                'confidence_score': 1.0,
+                'grounded': True,
+                'retrieval_scores': []
+            }
+        
         if not retrieved_docs:
             return {
                 'answer': "No relevant information found in the document. Please try a different question.",
@@ -83,42 +81,40 @@ class RAGEngine:
                 'retrieval_scores': []
             }
         
-        # Guardrail 1: Check similarity threshold
         max_similarity = max([doc['score'] for doc in retrieved_docs])
         if max_similarity < Config.SIMILARITY_THRESHOLD:
             return {
-                'answer': "The document doesn't contain information closely matching your question. Please rephrase.",
+                'answer': "The document doesn't contain information closely matching your question. Please rephrase or ask about different topics.",
                 'sources': [doc['text'][:200] + "..." for doc in retrieved_docs[:2]],
                 'confidence_score': max_similarity * 0.5,
                 'grounded': False,
                 'retrieval_scores': [doc['score'] for doc in retrieved_docs]
             }
         
-        # Prepare context
         context = "\n\n---\n\n".join([doc['text'] for doc in retrieved_docs])
-        
-        # Generate answer using LLM
         llm_result = self.llm_client.generate_answer(question, context)
         
-        # Calculate confidence score
         confidence_score = self._calculate_confidence_with_llm(
             retrieved_docs, 
-            llm_result['certainty'],
-            llm_result['found_in_context']
+            llm_result.get('certainty', 0.7),
+            llm_result.get('found_in_context', True)
         )
         
-        # Guardrail 2: Check if answer was found
-        if not llm_result['found_in_context'] or confidence_score < Config.MIN_CONFIDENCE_FOR_ANSWER:
+        if confidence_score < Config.MIN_CONFIDENCE_FOR_ANSWER:
             return {
-                'answer': "I couldn't find a clear answer to your question in the document.",
+                'answer': "I'm not confident enough to answer this question accurately. Please rephrase or check if the information exists in the document.",
                 'sources': [doc['text'][:200] + "..." for doc in retrieved_docs[:2]],
                 'confidence_score': confidence_score,
                 'grounded': False,
                 'retrieval_scores': [doc['score'] for doc in retrieved_docs]
             }
         
-        # Prepare sources
-        sources = [doc['text'][:300] + "..." for doc in retrieved_docs[:2]]
+        sources = []
+        for doc in retrieved_docs[:2]:
+            source_text = doc['text'][:300]
+            if len(doc['text']) > 300:
+                source_text += "..."
+            sources.append(source_text)
         
         return {
             'answer': llm_result['answer'],
@@ -129,8 +125,6 @@ class RAGEngine:
         }
     
     def _calculate_confidence_with_llm(self, retrieved_docs: List[Dict], llm_certainty: float, found: bool) -> float:
-        """Calculate composite confidence score including LLM certainty"""
-        
         if not found:
             return 0.2
         
@@ -147,13 +141,12 @@ class RAGEngine:
         confidence = (
             weights['similarity'] * avg_similarity +
             weights['agreement'] * agreement_score +
-            weights['llm_certainty'] * llm_certainty
+            weights.get('llm_certainty', 0.3) * llm_certainty
         )
         
         return max(0.0, min(1.0, confidence))
     
     def clear_session(self, session_id: str):
-        """Clear session data"""
         if session_id in self.indexes:
             del self.indexes[session_id]
         if session_id in self.chunks_store:
