@@ -27,35 +27,46 @@ class LLMClient:
     def generate_answer(self, question: str, context: str) -> Dict[str, Any]:
         """Generate answer from context using LLM"""
         
-        prompt = f"""You are a logistics document assistant. Answer the question based ONLY on the provided context.
+        # Build prompt that handles ALL types of questions (including greetings)
+        prompt = f"""You are a professional logistics document assistant. 
 
-Context:
-{context}
+CONTEXT (only use if relevant to the question):
+{context if context else "No document uploaded yet."}
 
-Question: {question}
+USER QUESTION: {question}
 
-Instructions:
-1. Answer ONLY using information from the context above
-2. If the answer is not in the context, say "Not found in document"
-3. Be specific and direct
-4. Include relevant details like dates, rates, names
-5. if the {question} is like greeting like Hi, hello, good mnornging then reply according to that
+INSTRUCTIONS:
+1. FIRST, identify the type of question:
+   - If it's a greeting (hi, hello, good morning, etc.) → Respond warmly as a helpful assistant
+   - If it's a general conversation (how are you, what can you do, etc.) → Respond appropriately
+   - If it's about the document → Answer ONLY from the context above
+   - If no document uploaded and question needs document → Say "Please upload a document first"
 
-Answer:"""
+2. For document questions:
+   - Answer ONLY using information from the CONTEXT
+   - If answer not in context, say "Not found in document"
+   - Be specific, professional, and direct
+
+3. For greetings and general conversation:
+   - Be friendly and helpful
+   - Briefly explain your capabilities
+   - Guide user to ask about document content
+
+ANSWER:"""
         
         try:
             if self.provider == 'openai':
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=[
-                        {"role": "system", "content": "You are a precise logistics assistant. Only answer from given context."},
+                        {"role": "system", "content": "You are a professional logistics document assistant. Handle greetings naturally and answer document questions strictly from context."},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.1,
                     max_tokens=300
                 )
                 answer = response.choices[0].message.content
-                certainty = 0.85  # OpenAI is reliable
+                certainty = 0.85
                 
             else:  # ollama
                 import requests
@@ -73,19 +84,19 @@ Answer:"""
                 answer = result.get('response', '')
                 certainty = 0.75
             
-            # Check if answer indicates not found
-            is_found = "not found" not in answer.lower() and "no information" not in answer.lower()
+            # Determine if answer is based on context
+            is_found = "not found" not in answer.lower() and "please upload" not in answer.lower()
             
             return {
                 'answer': answer,
-                'certainty': certainty if is_found else 0.2,
+                'certainty': certainty if is_found else 0.5,
                 'found_in_context': is_found
             }
             
         except Exception as e:
             print(f"LLM Error: {e}")
             return {
-                'answer': f"LLM Error: {str(e)}. Using fallback.",
+                'answer': f"Unable to process your question. Please try again.",
                 'certainty': 0.3,
                 'found_in_context': False
             }
@@ -93,17 +104,25 @@ Answer:"""
     def extract_structured_data(self, text: str) -> Dict[str, Any]:
         """Extract structured shipment data using LLM"""
         
+        if not text or text.strip() == "":
+            return {
+                'shipment_id': None, 'shipper': None, 'consignee': None,
+                'pickup_datetime': None, 'delivery_datetime': None,
+                'equipment_type': None, 'mode': 'truck', 'rate': None,
+                'currency': None, 'weight': None, 'carrier_name': None
+            }
+        
         prompt = f"""Extract logistics shipment information from the document below.
 
-Document:
+DOCUMENT TEXT:
 {text[:2500]}
 
-Extract these fields as JSON:
+FIELDS TO EXTRACT (as JSON):
 - shipment_id (string)
 - shipper (string)
 - consignee (string)
-- pickup_datetime (string, format: YYYY-MM-DD if possible)
-- delivery_datetime (string, format: YYYY-MM-DD if possible)
+- pickup_datetime (string, format YYYY-MM-DD)
+- delivery_datetime (string, format YYYY-MM-DD)
 - equipment_type (string: 53ft, 48ft, dry van, reefer, flatbed, container)
 - mode (string: truck, rail, air, ocean)
 - rate (number)
@@ -111,10 +130,10 @@ Extract these fields as JSON:
 - weight (number, in lbs)
 - carrier_name (string)
 
-Rules:
-1. If a field is not found, use null
-2. Return ONLY valid JSON, no other text
-3. Convert dates to YYYY-MM-DD when possible
+RULES:
+1. If field not found, use null
+2. Return ONLY valid JSON
+3. No additional text outside JSON
 
 JSON:"""
         
@@ -162,7 +181,6 @@ JSON:"""
             
         except Exception as e:
             print(f"Extraction Error: {e}")
-            # Return empty extraction on error
             return {
                 'shipment_id': None, 'shipper': None, 'consignee': None,
                 'pickup_datetime': None, 'delivery_datetime': None,
